@@ -1,0 +1,88 @@
+name: self-service-db-create
+run-name: ${{ github.actor }} is learning GitHub Actions
+on: [push]
+  workflow_dispatch:
+    inputs:
+      awsaccountname:
+        type: choice
+        description: choose aws_account
+        options:
+          - aws-dev-#1234
+          - aws-qa-#3456
+      rds-engine:
+        type: choice
+        description: choose rds engine
+        options:
+          - mysql
+          - postgres
+          - mssql
+          - docdb
+          -mysql-aurora
+      rdsidentifer:
+        description: "dbidentifer"
+        required: true
+        default: dbidentifer
+      rdsdbname:
+        description: "dbname"
+        required: true
+        default: "dbname"
+      instance_class:
+        type: choice
+        description: choose instance class
+        options:
+          - db.t3.medium
+          - db.t3.small
+          - db.t3.micro
+      tag:
+        type: choice
+        description: tags
+        options:
+          - name
+          - post
+          - hello
+          - docdb
+         
+jobs:
+  # this workflow contains a single job called build
+  RDS-Db-deploy
+  #check-bats-version:
+    runs-on: ubuntu-latest
+    env:
+      account_id_dev: "1234"
+      account_id_qa: "3456"
+      #terraform working directory
+      TF_WORKING_DIRECTORY_DEV_POSTGRES: "infra-creation/terraform-rds"
+      AWS_ACCESS_KEY_ID: "${{secrets.AWS_ACCESS_KEY_ID}}"
+      AWS_SECRET_ACCESS_KEY: "${{secrets.AWS_SECRET_ACCESS_KEY}}"
+    # STEPS REPRESENT A SEQUENCE OF TASKS TAHT WILL BE EXICUTED AS PART OF THE JOB  
+    steps:
+      #check-out your repositry under $GITHUB_WORKSPACE, so your job can be access it 
+      - uses: actions/checkout@v2
+        with:
+          path: self-service
+          fetch-depth: "0"
+          ref: master
+      - name: setup SSH    
+      - uses: MrSquare/ssh-setup-action@v1
+        with: 
+          host: github.com
+          private-key: ${{secrets.SSH_PRIVATE_KEY}}
+      - uses: hashicrop/setup-terraform@v1
+        with: 
+          terrform_version: 1.1.7
+        
+#updatring the bucket
+- id: "update_bucket_dev_postgres"
+  name: update bucket and terraform apply for dev postgres
+  if: ${{ github.event.inputs.awsaccountnmae == 'aws-dev-#1234' && guthub.event.inputs.rds_engine == 'postgres'}}
+  run: |
+    cd ${{ env.TF_WORKING_DIRECTORY_DEV_POSTGRES }}
+    cp backend.tf.example backend.tf
+    ls -lrt
+    sed -i 's/UPDATEENV/${{github.event.inputs.rdsidentifer}}/' backend.tf
+    cat backend.tf
+    rm -rf .terraform
+    terraform  init --backend-config="access_key=${{secrets.AWS_ACCESS_KEY_ID}}" --backend-config="secret_key=${{secrets.AWS_SECRET_ACCESS_KEY}}"
+    terraform  validate -no-color
+    terraform  plan -no-color -lock=false -var="identifier=${{github.event.inputs.rdsidentifier}}" -var="instance_class=${{github.event.inputs.instance_class }}" -var="db_name=${{github.event.inputs.rdsdbname}}" -var="account_id_dev=${{env.account_id_dev}}" -var="leadership-spoc=${{github.event.inputs.tags}}"  
+    terraform  apply -auto-approve -lock=false -var="identifier=${{github.event.inputs.rdsidentifier}}" -var="instance_class=${{github.event.inputs.instance_class }}" -var="db_name=${{github.event.inputs.rdsdbname}}" -var="account_id_dev=${{env.account_id_dev}}" -var="leadership-spoc=${{github.event.inputs.tags}}"  -var="db-instance=${{github.event.inputs.instance_class}}" 
