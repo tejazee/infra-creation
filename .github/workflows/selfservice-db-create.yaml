@@ -45,7 +45,7 @@ on:
          
 jobs:
   # this workflow contains a single job called build
-  RDS-DB-deploy
+  RDS-DB-deploy:
     runs-on: ubuntu-latest
     env:
       account_id_dev: "1234"
