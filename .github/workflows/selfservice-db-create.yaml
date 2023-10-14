@@ -46,7 +46,6 @@ on:
 jobs:
   # this workflow contains a single job called build
   RDS-Db-deploy
-  #check-bats-version:
     runs-on: ubuntu-latest
     env:
       account_id_dev: "1234"
