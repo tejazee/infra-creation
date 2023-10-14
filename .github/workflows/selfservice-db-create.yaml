@@ -18,7 +18,7 @@ on:
           - postgres
           - mssql
           - docdb
-          -mysql-aurora
+    
       rdsidentifer:
         description: "dbidentifer"
         required: true
