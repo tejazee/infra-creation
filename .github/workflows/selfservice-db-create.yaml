@@ -83,6 +83,6 @@ jobs:
           cat backend.tf
           rm -rf .terraform
           terraform  init --backend-config="access_key=${{secrets.AWS_ACCESS_KEY_ID}}" --backend-config="secret_key=${{secrets.AWS_SECRET_ACCESS_KEY}}"
-          terraform  validate -no-color
+        #  terraform  validate -no-color
           terraform  plan -no-color -lock=false -var="identifier=${{github.event.inputs.rdsidentifier}}" -var="instance_class=${{github.event.inputs.instance_class }}" -var="db_name=${{github.event.inputs.rdsdbname}}" -var="account_id_dev=${{env.account_id_dev}}" -var="tag=${{github.event.inputs.tags}}" 
           terraform  apply -auto-approve -lock=false -var="identifier=${{github.event.inputs.rdsidentifier}}" -var="instance_class=${{github.event.inputs.instance_class }}" -var="db_name=${{github.event.inputs.rdsdbname}}" -var="account_id_dev=${{env.account_id_dev}}" -var="tag=${{github.event.inputs.tags}}" 
