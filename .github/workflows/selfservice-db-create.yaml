@@ -62,7 +62,8 @@ jobs:
           path: self-service
           fetch-depth: "0"
           ref: master
-      - name: setup SSH    
+      - name: setup SSH
+        run: echo "SSH setup step"   
       - uses: MrSquare/ssh-setup-action@v1
         with: 
           host: github.com
