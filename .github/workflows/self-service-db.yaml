@@ -1,0 +1,433 @@
+# This is a basic workflow to help you get started with Actions
+ 
+name: Selfservice-db-create
+ 
+# Controls when the workflow will run
+on:
+  #push:
+  #branches: [ main ]
+  #pull_request:
+  #branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      awsaccountname:
+        type: choice
+        description: choose aws account to deploy DBname
+        options:
+          - Zee5-dev-#387911087127
+          - Zee5-pt-#997200155612
+          - Zee5-QC-#387911087127
+      rds_engine:
+        type: choice
+        description: choose RDS engine
+        options:
+          - Mysql
+          - postgres
+          - mssql
+          - docdb
+          - mysql-aurora
+      rdsidentifier:
+        description: "dbidentifier name only lowercase alphanumeric characters/no hyphens,space,underscore allowed only mention service name ex - adtech/gwapi etc"
+        required: true
+        default: "dbidentifier"
+      rdsdbname:
+        description: "dbidentifier name only lowercase alphanumeric characters/no hyphens,space,underscore allowed only mention service name ex - adtech/gwapi etc"
+        required: true
+        default: "dbname"
+      instance_class:
+        type: choice
+        description: choose instance class
+        options:
+          - db.t3.medium
+          - db.t3.small
+          - db.t2.small
+          - db.t2.medium
+          - db.t4g.micro
+          - db.m6g.large
+          - db.t3.xlarge
+      tag1:
+        type: choice
+        description: choose leadership-spoc
+        options:
+          - "Vaibhav Singh"
+          - "Suraj Yadav"
+          - "Rajesh Kumar"
+          - "Praveen S"
+          - "Pradeep R"
+          - "Ranjeet Mishra"
+          - "Shalin Patel"
+          - "Suneel Khare"
+          - "Srestangsh Das"
+          - "Arindam Das"
+          - "Pramod Prakash"
+      tag2:
+        type: choice
+        description: choose service-family
+        options:
+          - "Adtech"
+          - "Recommendation"
+          - "Content"
+          - "Platform"
+          - "B2B"
+          - "SharedServices"
+          - "Engagement"
+          - "HIPI"
+          - "Subscription"
+          - "Payment"
+          - "Playback"
+          - "Search"
+          - "Login"
+          - "VideoEngg"
+          - "DataEngg"
+          - "InfoSec"
+          - "CDN"
+          - "SharedInfra"
+          - "Observability"
+          - "User management"
+      tag3:
+        description: "service-name"
+        required: true
+        default: "service-name"
+      tag4:
+        description: "service-owner"
+        required: true
+        default: "service-owner"
+      tag5:
+        description: "jira-request"
+        required: true
+        default: "jira-request no ex - DOP-12xx"
+ 
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+jobs:
+  # This workflow contains a single job called "build"
+  RDS-DB-deploy:
+    runs-on: ubuntu-latest
+    env:
+      account_id_dev: "387911087127"
+      account_id_qc: "387911087127"
+      account_id_pt: "997200155612"
+      # Terraform Working Directory
+      TF_WORKING_DIRECTORY_DEV_MYSQL: "self-service/db-selfservice/dev/mysql"
+      TF_WORKING_DIRECTORY_DEV_POSTGRES: "self-service/db-selfservice/dev/postgres"
+      TF_WORKING_DIRECTORY_DEV_MSSQL: "self-service/db-selfservice/dev/mssql"
+      TF_WORKING_DIRECTORY_DEV_DOCDB: "self-service/db-selfservice/dev/docdb"
+      TF_WORKING_DIRECTORY_DEV_MYSQL_AURORA: "self-service/db-selfservice/dev/mysql-aurora"
+      TF_WORKING_DIRECTORY_QC_MYSQL: "self-service/db-selfservice/qc/mysql"
+      TF_WORKING_DIRECTORY_QC_POSTGRES: "self-service/db-selfservice/qc/postgres"
+      TF_WORKING_DIRECTORY_QC_MSSQL: "self-service/db-selfservice/qc/mssql"
+      TF_WORKING_DIRECTORY_QC_DOCDB: "self-service/db-selfservice/qc/docdb"
+      TF_WORKING_DIRECTORY_QC_MYSQL_AURORA: "self-service/db-selfservice/qc/mysql-aurora"
+      TF_WORKING_DIRECTORY_PT_MYSQL: "self-service/db-selfservice/pt/mysql"
+      TF_WORKING_DIRECTORY_PT_POSTGRES: "self-service/db-selfservice/pt/postgres"
+      TF_WORKING_DIRECTORY_PT_MSSQL: "self-service/db-selfservice/pt/mssql"
+      TF_WORKING_DIRECTORY_PT_DOCDB: "self-service/db-selfservice/pt/docdb"
+      TF_WORKING_DIRECTORY_PT_MYSQL_AURORA: "self-service/db-selfservice/pt/mysql-aurora"
+      AWS_ACCESS_KEY_ID: "${{secrets.AWS_ACCESS_KEY_ID}}"
+      AWS_SECRET_ACCESS_KEY: "${{secrets.AWS_SECRET_ACCESS_KEY}}"
+ 
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - uses: actions/checkout@v2
+        with:
+          path: self-service
+          fetch-depth: "0"
+          ref: master
+      - name: Setup SSH
+        uses: MrSquaare/ssh-setup-action@v1
+        with:
+          host: github.com
+          private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+      - uses: hashicorp/setup-terraform@v1
+        with:
+          terraform_version: 1.1.7
+ 
+      # Updating the bucket
+      - id: "update_bucket_dev_mysql"
+        name: Update Bucket  and Terraform Apply for Dev MySQL
+        if: ${{ github.event.inputs.awsaccountname == 'Zee5-dev-#387911087127' && github.event.inputs.rds_engine == 'Mysql' }}
+        run: |
+          cd ${{ env.TF_WORKING_DIRECTORY_DEV_MYSQL }}
+          cp backend.tf.example backend.tf
+          ls -ltr
+          sed -i 's/UPDATEENV/${{github.event.inputs.rdsidentifier}}/' backend.tf
+          cat backend.tf
+          rm -rf .terraform
+          terraform  init --backend-config="access_key=${{secrets.AWS_ACCESS_KEY_ID}}" --backend-config="secret_key=${{secrets.AWS_SECRET_ACCESS_KEY}}"
+          terraform  validate -no-color
+          terraform  plan -no-color -lock=false -var="identifier=${{github.event.inputs.rdsidentifier}}" -var="instance_class=${{github.event.inputs.instance_class }}" -var="db_name=${{github.event.inputs.rdsdbname}}" -var="account_id_dev=${{env.account_id_dev}}" -var="leadership-spoc=${{github.event.inputs.tag1}}" -var="cost-center=${{github.event.inputs.tag2}}_dev" -var="service-family=${{github.event.inputs.tag2}}" -var="service-name=${{github.event.inputs.tag3}}" -var="service-owner=${{github.event.inputs.tag4}}" -var="db-instance=${{github.event.inputs.instance_class}}" -var="jira-request=${{github.event.inputs.tag5}}"
+          terraform  apply -auto-approve -lock=false -var="identifier=${{github.event.inputs.rdsidentifier}}" -var="instance_class=${{github.event.inputs.instance_class }}" -var="db_name=${{github.event.inputs.rdsdbname}}" -var="account_id_dev=${{env.account_id_dev}}" -var="leadership-spoc=${{github.event.inputs.tag1}}" -var="cost-center=${{github.event.inputs.tag2}}_dev" -var="service-family=${{github.event.inputs.tag2}}" -var="service-name=${{github.event.inputs.tag3}}" -var="service-owner=${{github.event.inputs.tag4}}" -var="db-instance=${{github.event.inputs.instance_class}}" -var="jira-request=${{github.event.inputs.tag5}}"
+ 
+      # ----------------------------------------------------------------------------------------------------------------------
+ 
+      - id: "update_bucket_dev_postgres"
+        name: Update Bucket and Terraform Apply for Dev Postgres
+        if: ${{ github.event.inputs.awsaccountname == 'Zee5-dev-#387911087127' && github.event.inputs.rds_engine == 'postgres' }}
+        run: |
+          cd ${{ env.TF_WORKING_DIRECTORY_DEV_POSTGRES }}
+          cp backend.tf.example backend.tf
+          ls -ltr
+          sed -i 's/UPDATEENV/${{github.event.inputs.rdsidentifier}}/' backend.tf
+          cat backend.tf
+          rm -rf .terraform
+          terraform  init --backend-config="access_key=${{secrets.AWS_ACCESS_KEY_ID}}" --backend-config="secret_key=${{secrets.AWS_SECRET_ACCESS_KEY}}"
+          terraform  validate -no-color
+          terraform  plan -no-color -lock=false -var="identifier=${{github.event.inputs.rdsidentifier}}" -var="instance_class=${{github.event.inputs.instance_class }}" -var="db_name=${{github.event.inputs.rdsdbname}}" -var="account_id_dev=${{env.account_id_dev}}" -var="leadership-spoc=${{github.event.inputs.tag1}}" -var="cost-center=${{github.event.inputs.tag2}}_dev" -var="service-family=${{github.event.inputs.tag2}}" -var="service-name=${{github.event.inputs.tag3}}" -var="service-owner=${{github.event.inputs.tag4}}" -var="db-instance=${{github.event.inputs.instance_class}}" -var="jira-request=${{github.event.inputs.tag5}}"
+          terraform  apply -auto-approve -lock=false -var="identifier=${{github.event.inputs.rdsidentifier}}" -var="instance_class=${{github.event.inputs.instance_class }}" -var="db_name=${{github.event.inputs.rdsdbname}}" -var="account_id_dev=${{env.account_id_dev}}" -var="leadership-spoc=${{github.event.inputs.tag1}}" -var="cost-center=${{github.event.inputs.tag2}}_dev" -var="service-family=${{github.event.inputs.tag2}}" -var="service-name=${{github.event.inputs.tag3}}" -var="service-owner=${{github.event.inputs.tag4}}" -var="db-instance=${{github.event.inputs.instance_class}}" -var="jira-request=${{github.event.inputs.tag5}}"
+      # ----------------------------------------------------------------------------------------------------------------------
+      - id: "update_bucket_dev_mssql"
+        name: Update Bucket and Terraform Apply for Dev Mssql
+        if: ${{ github.event.inputs.awsaccountname == 'Zee5-dev-#387911087127' && github.event.inputs.rds_engine == 'mssql' }}
+        run: |
+          cd ${{ env.TF_WORKING_DIRECTORY_DEV_MSSQL }}
+          cp backend.tf.example backend.tf
+          ls -ltr
+          sed -i 's/UPDATEENV/${{github.event.inputs.rdsidentifier}}/' backend.tf
+          cat backend.tf
+          rm -rf .terraform
+          terraform  init --backend-config="access_key=${{secrets.AWS_ACCESS_KEY_ID}}" --backend-config="secret_key=${{secrets.AWS_SECRET_ACCESS_KEY}}"
+          terraform  validate -no-color
+          terraform  plan -no-color -lock=false -var="identifier=${{github.event.inputs.rdsidentifier}}" -var="instance_class=${{github.event.inputs.instance_class }}" -var="db_name=" -var="account_id_dev=${{env.account_id_dev}}" -var="leadership-spoc=${{github.event.inputs.tag1}}" -var="cost-center=${{github.event.inputs.tag2}}_dev" -var="service-family=${{github.event.inputs.tag2}}" -var="service-name=${{github.event.inputs.tag3}}" -var="service-owner=${{github.event.inputs.tag4}}" -var="db-instance=${{github.event.inputs.instance_class}}" -var="jira-request=${{github.event.inputs.tag5}}"
+          terraform  apply -auto-approve -lock=false -var="identifier=${{github.event.inputs.rdsidentifier}}" -var="instance_class=${{github.event.inputs.instance_class }}" -var="db_name=" -var="account_id_dev=${{env.account_id_dev}}" -var="leadership-spoc=${{github.event.inputs.tag1}}" -var="cost-center=${{github.event.inputs.tag2}}_dev" -var="service-family=${{github.event.inputs.tag2}}" -var="service-name=${{github.event.inputs.tag3}}" -var="service-owner=${{github.event.inputs.tag4}}" -var="db-instance=${{github.event.inputs.instance_class}}" -var="jira-request=${{github.event.inputs.tag5}}"
+      # ----------------------------------------------------------------------------------------------------------------------
+      - id: "update_bucket_dev_docdb"
+        name: Update Bucket and Terraform Apply for Dev Docdb
+        if: ${{ github.event.inputs.awsaccountname == 'Zee5-dev-#387911087127' && github.event.inputs.rds_engine == 'docdb' }}
+        run: |
+          cd ${{ env.TF_WORKING_DIRECTORY_DEV_DOCDB }}
+          cp backend.tf.example backend.tf
+          ls -ltr
+          sed -i 's/UPDATEENV/${{github.event.inputs.rdsidentifier}}/' backend.tf
+          cat backend.tf
+          rm -rf .terraform
+          terraform  init --backend-config="access_key=${{secrets.AWS_ACCESS_KEY_ID}}" --backend-config="secret_key=${{secrets.AWS_SECRET_ACCESS_KEY}}"
+          terraform  validate -no-color
+          terraform  plan -no-color -lock=false -var="identifier=${{github.event.inputs.rdsidentifier}}" -var="instance_class=${{github.event.inputs.instance_class }}" -var="db_name=" -var="account_id_dev=${{env.account_id_dev}}" -var="leadership-spoc=${{github.event.inputs.tag1}}" -var="cost-center=${{github.event.inputs.tag2}}_dev" -var="service-family=${{github.event.inputs.tag2}}" -var="service-name=${{github.event.inputs.tag3}}" -var="service-owner=${{github.event.inputs.tag4}}" -var="db-instance=${{github.event.inputs.instance_class}}" -var="jira-request=${{github.event.inputs.tag5}}"
+          terraform  apply -auto-approve -lock=false -var="identifier=${{github.event.inputs.rdsidentifier}}" -var="instance_class=${{github.event.inputs.instance_class }}" -var="db_name=" -var="account_id_dev=${{env.account_id_dev}}" -var="leadership-spoc=${{github.event.inputs.tag1}}" -var="cost-center=${{github.event.inputs.tag2}}_dev" -var="service-family=${{github.event.inputs.tag2}}" -var="service-name=${{github.event.inputs.tag3}}" -var="service-owner=${{github.event.inputs.tag4}}" -var="db-instance=${{github.event.inputs.instance_class}}" -var="jira-request=${{github.event.inputs.tag5}}"
+      # ----------------------------------------------------------------------------------------------------------------------
+      - id: "update_bucket_dev_mysql_aurora"
+        name: Update Bucket and Terraform Apply for Dev Mysql-aurora
+        if: ${{ github.event.inputs.awsaccountname == 'Zee5-dev-#387911087127' && github.event.inputs.rds_engine == 'mysql-aurora' }}
+        run: |
+          cd ${{ env.TF_WORKING_DIRECTORY_DEV_MYSQL_AURORA }}
+          cp backend.tf.example backend.tf
+          ls -ltr
+          sed -i 's/UPDATEENV/${{github.event.inputs.rdsidentifier}}/' backend.tf
+          cat backend.tf
+          rm -rf .terraform
+          terraform  init --backend-config="access_key=${{secrets.AWS_ACCESS_KEY_ID}}" --backend-config="secret_key=${{secrets.AWS_SECRET_ACCESS_KEY}}"
+          terraform  validate -no-color
+          terraform  plan -no-color -lock=false -var="identifier=${{github.event.inputs.rdsidentifier}}" -var="instance_class=${{github.event.inputs.instance_class }}" -var="db_name=${{github.event.inputs.rdsdbname}}" -var="account_id_dev=${{env.account_id_dev}}" -var="leadership-spoc=${{github.event.inputs.tag1}}" -var="cost-center=${{github.event.inputs.tag2}}_dev" -var="service-family=${{github.event.inputs.tag2}}" -var="service-name=${{github.event.inputs.tag3}}" -var="service-owner=${{github.event.inputs.tag4}}" -var="db-instance=${{github.event.inputs.instance_class}}" -var="jira-request=${{github.event.inputs.tag5}}"
+          terraform  apply -auto-approve -lock=false -var="identifier=${{github.event.inputs.rdsidentifier}}" -var="instance_class=${{github.event.inputs.instance_class }}" -var="db_name=${{github.event.inputs.rdsdbname}}" -var="account_id_dev=${{env.account_id_dev}}" -var="leadership-spoc=${{github.event.inputs.tag1}}" -var="cost-center=${{github.event.inputs.tag2}}_dev" -var="service-family=${{github.event.inputs.tag2}}" -var="service-name=${{github.event.inputs.tag3}}" -var="service-owner=${{github.event.inputs.tag4}}" -var="db-instance=${{github.event.inputs.instance_class}}" -var="jira-request=${{github.event.inputs.tag5}}"
+      # ----------------------------------------------------------------------------------------------------------------------
+      - id: "update_bucket_qc_mysql"
+        name: Update Bucket and Terraform Apply for QC MySQL
+        if: ${{ github.event.inputs.awsaccountname == 'Zee5-QC-#387911087127' &&  github.event.inputs.rds_engine == 'Mysql' }}
+        run: |
+          cd ${{ env.TF_WORKING_DIRECTORY_QC_MYSQL }}
+          cp backend.tf.example backend.tf
+          ls -ltr
+          sed -i 's/UPDATEENV/${{github.event.inputs.rdsidentifier}}/' backend.tf
+          cat backend.tf
+          rm -rf .terraform
+          terraform init --backend-config="access_key=${{secrets.AWS_ACCESS_KEY_ID}}" --backend-config="secret_key=${{secrets.AWS_SECRET_ACCESS_KEY}}"
+          terraform validate -no-color
+          terraform plan -no-color -lock=false -var="identifier=${{github.event.inputs.rdsidentifier}}" -var="instance_class=${{github.event.inputs.instance_class }}" -var="db_name=${{github.event.inputs.rdsdbname}}" -var="account_id_qc=${{env.account_id_qc}}" -var="leadership-spoc=${{github.event.inputs.tag1}}" -var="cost-center=${{github.event.inputs.tag2}}_qc" -var="service-family=${{github.event.inputs.tag2}}" -var="service-name=${{github.event.inputs.tag3}}" -var="service-owner=${{github.event.inputs.tag4}}" -var="db-instance=${{github.event.inputs.instance_class}}" -var="jira-request=${{github.event.inputs.tag5}}"
+          terraform  apply -auto-approve -lock=false -var="identifier=${{github.event.inputs.rdsidentifier}}" -var="instance_class=${{github.event.inputs.instance_class }}" -var="db_name=${{github.event.inputs.rdsdbname}}" -var="account_id_qc=${{env.account_id_qc}}" -var="leadership-spoc=${{github.event.inputs.tag1}}" -var="cost-center=${{github.event.inputs.tag2}}_qc" -var="service-family=${{github.event.inputs.tag2}}" -var="service-name=${{github.event.inputs.tag3}}" -var="service-owner=${{github.event.inputs.tag4}}" -var="db-instance=${{github.event.inputs.instance_class}}" -var="jira-request=${{github.event.inputs.tag5}}"
+      # ----------------------------------------------------------------------------------------------------------------------
+      - id: "update_bucket_qc_postgres"
+        name: Update Bucket and Terraform Apply for QC Postgres
+        if: ${{ github.event.inputs.awsaccountname == 'Zee5-QC-#387911087127' &&  github.event.inputs.rds_engine == 'postgres' }}
+        run: |
+          cd ${{ env.TF_WORKING_DIRECTORY_QC_POSTGRES }}
+          cp backend.tf.example backend.tf
+          ls -ltr
+          sed -i 's/UPDATEENV/${{github.event.inputs.rdsidentifier}}/' backend.tf
+          cat backend.tf
+          rm -rf .terraform
+          terraform  init --backend-config="access_key=${{secrets.AWS_ACCESS_KEY_ID}}" --backend-config="secret_key=${{secrets.AWS_SECRET_ACCESS_KEY}}"
+          terraform  validate -no-color
+          terraform  plan -no-color -lock=false -var="identifier=${{github.event.inputs.rdsidentifier}}" -var="instance_class=${{github.event.inputs.instance_class }}" -var="db_name=${{github.event.inputs.rdsdbname}}" -var="account_id_qc=${{env.account_id_qc}}" -var="leadership-spoc=${{github.event.inputs.tag1}}" -var="cost-center=${{github.event.inputs.tag2}}_qc" -var="service-family=${{github.event.inputs.tag2}}" -var="service-name=${{github.event.inputs.tag3}}" -var="service-owner=${{github.event.inputs.tag4}}" -var="db-instance=${{github.event.inputs.instance_class}}" -var="jira-request=${{github.event.inputs.tag5}}"
+          terraform  apply -auto-approve -lock=false -var="identifier=${{github.event.inputs.rdsidentifier}}" -var="instance_class=${{github.event.inputs.instance_class }}" -var="db_name=${{github.event.inputs.rdsdbname}}" -var="account_id_qc=${{env.account_id_qc}}" -var="leadership-spoc=${{github.event.inputs.tag1}}" -var="cost-center=${{github.event.inputs.tag2}}_qc" -var="service-family=${{github.event.inputs.tag2}}" -var="service-name=${{github.event.inputs.tag3}}" -var="service-owner=${{github.event.inputs.tag4}}" -var="db-instance=${{github.event.inputs.instance_class}}" -var="jira-request=${{github.event.inputs.tag5}}"
+      # ----------------------------------------------------------------------------------------------------------------------
+      - id: "update_bucket_qc_mssql"
+        name: Update Bucket and Terraform Apply for QC Mssql
+        if: ${{ github.event.inputs.awsaccountname == 'Zee5-QC-#387911087127' &&  github.event.inputs.rds_engine == 'mssql' }}
+        run: |
+          cd ${{ env.TF_WORKING_DIRECTORY_QC_MSSQL }}
+          cp backend.tf.example backend.tf
+          ls -ltr
+          sed -i 's/UPDATEENV/${{github.event.inputs.rdsidentifier}}/' backend.tf
+          cat backend.tf
+          rm -rf .terraform
+          terraform  init --backend-config="access_key=${{secrets.AWS_ACCESS_KEY_ID}}" --backend-config="secret_key=${{secrets.AWS_SECRET_ACCESS_KEY}}"
+          terraform  validate -no-color
+          terraform  plan -no-color -lock=false -var="identifier=${{github.event.inputs.rdsidentifier}}" -var="instance_class=${{github.event.inputs.instance_class }}" -var="db_name=" -var="account_id_qc=${{env.account_id_qc}}" -var="leadership-spoc=${{github.event.inputs.tag1}}" -var="cost-center=${{github.event.inputs.tag2}}_qc" -var="service-family=${{github.event.inputs.tag2}}" -var="service-name=${{github.event.inputs.tag3}}" -var="service-owner=${{github.event.inputs.tag4}}" -var="db-instance=${{github.event.inputs.instance_class}}" -var="jira-request=${{github.event.inputs.tag5}}"
+          terraform  apply -auto-approve -lock=false -var="identifier=${{github.event.inputs.rdsidentifier}}" -var="instance_class=${{github.event.inputs.instance_class }}" -var="db_name=" -var="account_id_qc=${{env.account_id_qc}}" -var="leadership-spoc=${{github.event.inputs.tag1}}" -var="cost-center=${{github.event.inputs.tag2}}_qc" -var="service-family=${{github.event.inputs.tag2}}" -var="service-name=${{github.event.inputs.tag3}}" -var="service-owner=${{github.event.inputs.tag4}}" -var="db-instance=${{github.event.inputs.instance_class}}" -var="jira-request=${{github.event.inputs.tag5}}"
+      # ----------------------------------------------------------------------------------------------------------------------
+      - id: "update_bucket_qc_docdb"
+        name: Update Bucket and Terraform Apply for QC Docdb
+        if: ${{ github.event.inputs.awsaccountname == 'Zee5-QC-#387911087127' &&  github.event.inputs.rds_engine == 'docdb' }}
+        run: |
+          cd ${{ env.TF_WORKING_DIRECTORY_QC_DOCDB }}
+          cp backend.tf.example backend.tf
+          ls -ltr
+          sed -i 's/UPDATEENV/${{github.event.inputs.rdsidentifier}}/' backend.tf
+          cat backend.tf
+          rm -rf .terraform
+          terraform  init --backend-config="access_key=${{secrets.AWS_ACCESS_KEY_ID}}" --backend-config="secret_key=${{secrets.AWS_SECRET_ACCESS_KEY}}"
+          terraform  validate -no-color
+          terraform  plan -no-color -lock=false -var="identifier=${{github.event.inputs.rdsidentifier}}" -var="instance_class=${{github.event.inputs.instance_class }}" -var="db_name=" -var="account_id_qc=${{env.account_id_qc}}" -var="leadership-spoc=${{github.event.inputs.tag1}}" -var="cost-center=${{github.event.inputs.tag2}}_qc" -var="service-family=${{github.event.inputs.tag2}}" -var="service-name=${{github.event.inputs.tag3}}" -var="service-owner=${{github.event.inputs.tag4}}" -var="db-instance=${{github.event.inputs.instance_class}}" -var="jira-request=${{github.event.inputs.tag5}}"
+          terraform  apply -auto-approve -lock=false -var="identifier=${{github.event.inputs.rdsidentifier}}" -var="instance_class=${{github.event.inputs.instance_class }}" -var="db_name=" -var="account_id_qc=${{env.account_id_qc}}" -var="leadership-spoc=${{github.event.inputs.tag1}}" -var="cost-center=${{github.event.inputs.tag2}}_qc" -var="service-family=${{github.event.inputs.tag2}}" -var="service-name=${{github.event.inputs.tag3}}" -var="service-owner=${{github.event.inputs.tag4}}" -var="db-instance=${{github.event.inputs.instance_class}}" -var="jira-request=${{github.event.inputs.tag5}}"
+      # ----------------------------------------------------------------------------------------------------------------------
+      - id: "update_bucket_qc_mysql_aurora"
+        name: Update Bucket and Terraform Apply for QC MySQL-Aurora
+        if: ${{ github.event.inputs.awsaccountname == 'Zee5-QC-#387911087127' &&  github.event.inputs.rds_engine == 'mysql-aurora' }}
+        run: |
+          cd ${{ env.TF_WORKING_DIRECTORY_QC_MYSQL_AURORA }}
+          cp backend.tf.example backend.tf
+          ls -ltr
+          sed -i 's/UPDATEENV/${{github.event.inputs.rdsidentifier}}/' backend.tf
+          cat backend.tf
+          rm -rf .terraform
+          terraform init --backend-config="access_key=${{secrets.AWS_ACCESS_KEY_ID}}" --backend-config="secret_key=${{secrets.AWS_SECRET_ACCESS_KEY}}"
+          terraform validate -no-color
+          terraform plan -no-color -lock=false -var="identifier=${{github.event.inputs.rdsidentifier}}" -var="instance_class=${{github.event.inputs.instance_class }}" -var="db_name=${{github.event.inputs.rdsdbname}}" -var="account_id_qc=${{env.account_id_qc}}" -var="leadership-spoc=${{github.event.inputs.tag1}}" -var="cost-center=${{github.event.inputs.tag2}}_qc" -var="service-family=${{github.event.inputs.tag2}}" -var="service-name=${{github.event.inputs.tag3}}" -var="service-owner=${{github.event.inputs.tag4}}" -var="db-instance=${{github.event.inputs.instance_class}}" -var="jira-request=${{github.event.inputs.tag5}}"
+          terraform  apply -auto-approve -lock=false -var="identifier=${{github.event.inputs.rdsidentifier}}" -var="instance_class=${{github.event.inputs.instance_class }}" -var="db_name=${{github.event.inputs.rdsdbname}}" -var="account_id_qc=${{env.account_id_qc}}" -var="leadership-spoc=${{github.event.inputs.tag1}}" -var="cost-center=${{github.event.inputs.tag2}}_qc" -var="service-family=${{github.event.inputs.tag2}}" -var="service-name=${{github.event.inputs.tag3}}" -var="service-owner=${{github.event.inputs.tag4}}" -var="db-instance=${{github.event.inputs.instance_class}}" -var="jira-request=${{github.event.inputs.tag5}}"
+      # ----------------------------------------------------------------------------------------------------------------------
+      - id: "update_bucket_pt_mysql"
+        name: Update Bucket and Terraform Apply for PT MySQL
+        if: ${{ github.event.inputs.awsaccountname == 'Zee5-pt-#997200155612' &&  github.event.inputs.rds_engine == 'Mysql' }}
+        run: |
+          cd ${{ env.TF_WORKING_DIRECTORY_PT_MYSQL }}
+          cp backend.tf.example backend.tf
+          ls -ltr
+          sed -i 's/UPDATEENV/${{github.event.inputs.rdsidentifier}}/' backend.tf
+          cat backend.tf
+          rm -rf .terraform
+          terraform  init --backend-config="access_key=${{secrets.AWS_ACCESS_KEY_ID}}" --backend-config="secret_key=${{secrets.AWS_SECRET_ACCESS_KEY}}"
+          terraform  validate -no-color
+          terraform  plan -no-color -lock=false -var="identifier=${{github.event.inputs.rdsidentifier}}" -var="instance_class=${{github.event.inputs.instance_class }}" -var="db_name=${{github.event.inputs.rdsdbname}}" -var="account_id_pt=${{env.account_id_pt}}" -var="leadership-spoc=${{github.event.inputs.tag1}}" -var="cost-center=${{github.event.inputs.tag2}}_pt" -var="service-family=${{github.event.inputs.tag2}}" -var="service-name=${{github.event.inputs.tag3}}" -var="service-owner=${{github.event.inputs.tag4}}" -var="db-instance=${{github.event.inputs.instance_class}}" -var="jira-request=${{github.event.inputs.tag5}}"
+          terraform  apply -auto-approve -lock=false -var="identifier=${{github.event.inputs.rdsidentifier}}" -var="instance_class=${{github.event.inputs.instance_class }}" -var="db_name=${{github.event.inputs.rdsdbname}}" -var="account_id_pt=${{env.account_id_pt}}" -var="leadership-spoc=${{github.event.inputs.tag1}}" -var="cost-center=${{github.event.inputs.tag2}}_pt" -var="service-family=${{github.event.inputs.tag2}}" -var="service-name=${{github.event.inputs.tag3}}" -var="service-owner=${{github.event.inputs.tag4}}" -var="db-instance=${{github.event.inputs.instance_class}}" -var="jira-request=${{github.event.inputs.tag5}}"
+      # ----------------------------------------------------------------------------------------------------------------------
+      - id: "update_bucket_pt_postgres"
+        name: Update Bucket and Terraform Apply for PT Postgres
+        if: ${{ github.event.inputs.awsaccountname == 'Zee5-pt-#997200155612' &&  github.event.inputs.rds_engine == 'postgres' }}
+        run: |
+          cd ${{ env.TF_WORKING_DIRECTORY_PT_POSTGRES }}
+          cp backend.tf.example backend.tf
+          ls -ltr
+          sed -i 's/UPDATEENV/${{github.event.inputs.rdsidentifier}}/' backend.tf
+          cat backend.tf
+          rm -rf .terraform
+          terraform  init --backend-config="access_key=${{secrets.AWS_ACCESS_KEY_ID}}" --backend-config="secret_key=${{secrets.AWS_SECRET_ACCESS_KEY}}"
+          terraform  validate -no-color
+          terraform  plan -no-color -lock=false -var="identifier=${{github.event.inputs.rdsidentifier}}" -var="instance_class=${{github.event.inputs.instance_class }}" -var="db_name=${{github.event.inputs.rdsdbname}}" -var="account_id_pt=${{env.account_id_pt}}" -var="leadership-spoc=${{github.event.inputs.tag1}}" -var="cost-center=${{github.event.inputs.tag2}}_pt" -var="service-family=${{github.event.inputs.tag2}}" -var="service-name=${{github.event.inputs.tag3}}" -var="service-owner=${{github.event.inputs.tag4}}" -var="db-instance=${{github.event.inputs.instance_class}}" -var="jira-request=${{github.event.inputs.tag5}}"
+          terraform  apply -auto-approve -lock=false -var="identifier=${{github.event.inputs.rdsidentifier}}" -var="instance_class=${{github.event.inputs.instance_class }}" -var="db_name=${{github.event.inputs.rdsdbname}}" -var="account_id_pt=${{env.account_id_pt}}" -var="leadership-spoc=${{github.event.inputs.tag1}}" -var="cost-center=${{github.event.inputs.tag2}}_pt" -var="service-family=${{github.event.inputs.tag2}}" -var="service-name=${{github.event.inputs.tag3}}" -var="service-owner=${{github.event.inputs.tag4}}" -var="db-instance=${{github.event.inputs.instance_class}}" -var="jira-request=${{github.event.inputs.tag5}}"
+      # ----------------------------------------------------------------------------------------------------------------------
+      - id: "update_bucket_pt_mssql"
+        name: Update Bucket and Terraform Apply for PT Mssql
+        if: ${{ github.event.inputs.awsaccountname == 'Zee5-pt-#997200155612' &&  github.event.inputs.rds_engine == 'mssql' }}
+        run: |
+          cd ${{ env.TF_WORKING_DIRECTORY_PT_MSSQL }}
+          cp backend.tf.example backend.tf
+          ls -ltr
+          sed -i 's/UPDATEENV/${{github.event.inputs.rdsidentifier}}/' backend.tf
+          cat backend.tf
+          rm -rf .terraform
+          terraform  init --backend-config="access_key=${{secrets.AWS_ACCESS_KEY_ID}}" --backend-config="secret_key=${{secrets.AWS_SECRET_ACCESS_KEY}}"
+          terraform  validate -no-color
+          terraform  plan -no-color -lock=false -var="identifier=${{github.event.inputs.rdsidentifier}}" -var="instance_class=${{github.event.inputs.instance_class }}" -var="db_name=" -var="account_id_pt=${{env.account_id_pt}}" -var="leadership-spoc=${{github.event.inputs.tag1}}" -var="cost-center=${{github.event.inputs.tag2}}_pt" -var="service-family=${{github.event.inputs.tag2}}" -var="service-name=${{github.event.inputs.tag3}}" -var="service-owner=${{github.event.inputs.tag4}}" -var="db-instance=${{github.event.inputs.instance_class}}" -var="jira-request=${{github.event.inputs.tag5}}"
+          terraform  apply -auto-approve -lock=false -var="identifier=${{github.event.inputs.rdsidentifier}}" -var="instance_class=${{github.event.inputs.instance_class }}" -var="db_name=" -var="account_id_pt=${{env.account_id_pt}}" -var="leadership-spoc=${{github.event.inputs.tag1}}" -var="cost-center=${{github.event.inputs.tag2}}_pt" -var="service-family=${{github.event.inputs.tag2}}" -var="service-name=${{github.event.inputs.tag3}}" -var="service-owner=${{github.event.inputs.tag4}}" -var="db-instance=${{github.event.inputs.instance_class}}" -var="jira-request=${{github.event.inputs.tag5}}"
+      # ----------------------------------------------------------------------------------------------------------------------
+      - id: "update_bucket_pt_docdb"
+        name: Update Bucket and Terraform Apply for PT Docdb
+        if: ${{ github.event.inputs.awsaccountname == 'Zee5-pt-#997200155612' &&  github.event.inputs.rds_engine == 'docdb' }}
+        run: |
+          cd ${{ env.TF_WORKING_DIRECTORY_PT_DOCDB }}
+          cp backend.tf.example backend.tf
+          ls -ltr
+          sed -i 's/UPDATEENV/${{github.event.inputs.rdsidentifier}}/' backend.tf
+          cat backend.tf
+          rm -rf .terraform
+          terraform  init --backend-config="access_key=${{secrets.AWS_ACCESS_KEY_ID}}" --backend-config="secret_key=${{secrets.AWS_SECRET_ACCESS_KEY}}"
+          terraform  validate -no-color
+          terraform  plan -no-color -lock=false -var="identifier=${{github.event.inputs.rdsidentifier}}" -var="instance_class=${{github.event.inputs.instance_class }}" -var="db_name=" -var="account_id_pt=${{env.account_id_pt}}" -var="leadership-spoc=${{github.event.inputs.tag1}}" -var="cost-center=${{github.event.inputs.tag2}}_pt" -var="service-family=${{github.event.inputs.tag2}}" -var="service-name=${{github.event.inputs.tag3}}" -var="service-owner=${{github.event.inputs.tag4}}" -var="db-instance=${{github.event.inputs.instance_class}}" -var="jira-request=${{github.event.inputs.tag5}}"
+          terraform  apply -auto-approve -lock=false -var="identifier=${{github.event.inputs.rdsidentifier}}" -var="instance_class=${{github.event.inputs.instance_class }}" -var="db_name=" -var="account_id_pt=${{env.account_id_pt}}" -var="leadership-spoc=${{github.event.inputs.tag1}}" -var="cost-center=${{github.event.inputs.tag2}}_pt" -var="service-family=${{github.event.inputs.tag2}}" -var="service-name=${{github.event.inputs.tag3}}" -var="service-owner=${{github.event.inputs.tag4}}" -var="db-instance=${{github.event.inputs.instance_class}}" -var="jira-request=${{github.event.inputs.tag5}}"
+      # ----------------------------------------------------------------------------------------------------------------------
+      - id: "update_bucket_pt_mysql_aurora"
+        name: Update Bucket and Terraform Apply for PT MySQL-Aurora
+        if: ${{ github.event.inputs.awsaccountname == 'Zee5-pt-#997200155612' &&  github.event.inputs.rds_engine == 'mysql-aurora' }}
+        run: |
+          cd ${{ env.TF_WORKING_DIRECTORY_PT_MYSQL_AURORA }}
+          cp backend.tf.example backend.tf
+          ls -ltr
+          sed -i 's/UPDATEENV/${{github.event.inputs.rdsidentifier}}/' backend.tf
+          cat backend.tf
+          rm -rf .terraform
+          terraform  init --backend-config="access_key=${{secrets.AWS_ACCESS_KEY_ID}}" --backend-config="secret_key=${{secrets.AWS_SECRET_ACCESS_KEY}}"
+          terraform  validate -no-color
+          terraform  plan -no-color -lock=false -var="identifier=${{github.event.inputs.rdsidentifier}}" -var="instance_class=${{github.event.inputs.instance_class }}" -var="db_name=${{github.event.inputs.rdsdbname}}" -var="account_id_pt=${{env.account_id_pt}}" -var="leadership-spoc=${{github.event.inputs.tag1}}" -var="cost-center=${{github.event.inputs.tag2}}_pt" -var="service-family=${{github.event.inputs.tag2}}" -var="service-name=${{github.event.inputs.tag3}}" -var="service-owner=${{github.event.inputs.tag4}}" -var="db-instance=${{github.event.inputs.instance_class}}" -var="jira-request=${{github.event.inputs.tag5}}"
+          terraform  apply -auto-approve -lock=false -var="identifier=${{github.event.inputs.rdsidentifier}}" -var="instance_class=${{github.event.inputs.instance_class }}" -var="db_name=${{github.event.inputs.rdsdbname}}" -var="account_id_pt=${{env.account_id_pt}}" -var="leadership-spoc=${{github.event.inputs.tag1}}" -var="cost-center=${{github.event.inputs.tag2}}_pt" -var="service-family=${{github.event.inputs.tag2}}" -var="service-name=${{github.event.inputs.tag3}}" -var="service-owner=${{github.event.inputs.tag4}}" -var="db-instance=${{github.event.inputs.instance_class}}" -var="jira-request=${{github.event.inputs.tag5}}"
+ 
+# Runs a set of commands using the runners shell
+# - id: "terraform_apply_dev_mysql"
+#   name: Terraform apply dev MySQL
+#   if: ${{ github.event.inputs.terraform_action == 'apply' }}
+#   run: |
+#     #cd zee5-DevOps-Infra/db-selfservice/mysql/
+#     rm -rf .terraform
+#     terraform -chdir=${{ env.TF_WORKING_DIRECTORY }} init --backend-config="access_key=${{secrets.AWS_ACCESS_KEY_ID}}" --backend-config="secret_key=${{secrets.AWS_SECRET_ACCESS_KEY}}"
+#     terraform -chdir=${{ env.TF_WORKING_DIRECTORY }} validate -no-color
+#     terraform -chdir=${{ env.TF_WORKING_DIRECTORY }} plan -no-color -lock=false -var="identifier=${{github.event.inputs.rdsidentifier}}" -var="instance_class=${{github.event.inputs.instance_class }}" -var="db_name=${{github.event.inputs.rdsdbname}}" -var="account_id_dev=${{env.account_id_dev}}" -var="leadership-spoc=${{github.event.inputs.tag1}}" -var="cost-center=${{github.event.inputs.tag2}}_dev" -var="service-family=${{github.event.inputs.tag2}}" -var="service-name=${{github.event.inputs.tag3}}" -var="service-owner=${{github.event.inputs.tag4}}" -var="db-instance=${{github.event.inputs.instance_class}}" -var="jira-request=${{github.event.inputs.tag5}}"
+#     # terraform -chdir=${{ env.TF_WORKING_DIRECTORY }} apply -auto-approve -lock=false -var="identifier=${{github.event.inputs.rdsidentifier}}" -var="instance_class=${{github.event.inputs.instance_class }}" -var="db_name=${{github.event.inputs.rdsdbname}}" -var="account_id_dev=${{env.account_id_dev}}" -var="leadership-spoc=${{github.event.inputs.tag1}}" -var="cost-center=${{github.event.inputs.tag2}}_dev" -var="service-family=${{github.event.inputs.tag2}}" -var="service-name=${{github.event.inputs.tag3}}" -var="service-owner=${{github.event.inputs.tag4}}" -var="db-instance=${{github.event.inputs.instance_class}}" -var="jira-request=${{github.event.inputs.tag5}}"
+# - id: "terraform_apply"
+#   name: Terraform apply
+#   # if: ${{ github.event.inputs.terraform_action == 'apply' }}
+#   run: |
+#     #cd zee5-DevOps-Infra/db-selfservice/mysql/
+#     rm -rf .terraform
+#     terraform -chdir=${{ env.TF_WORKING_DIRECTORY }} init --backend-config="access_key=${{secrets.AWS_ACCESS_KEY_ID}}" --backend-config="secret_key=${{secrets.AWS_SECRET_ACCESS_KEY}}"
+#     terraform -chdir=${{ env.TF_WORKING_DIRECTORY }} validate -no-color
+#     terraform -chdir=${{ env.TF_WORKING_DIRECTORY }} plan -no-color -lock=false -var="identifier=${{github.event.inputs.rdsidentifier}}" -var="instance_class=${{github.event.inputs.instance_class }}" -var="db_name=${{github.event.inputs.rdsdbname}}" -var="account_id_dev=${{env.account_id_dev}}" -var="leadership-spoc=${{github.event.inputs.tag1}}" -var="cost-center=${{github.event.inputs.tag2}}_dev" -var="service-family=${{github.event.inputs.tag2}}" -var="service-name=${{github.event.inputs.tag3}}" -var="service-owner=${{github.event.inputs.tag4}}" -var="db-instance=${{github.event.inputs.instance_class}}" -var="jira-request=${{github.event.inputs.tag5}}"
+#     # terraform -chdir=${{ env.TF_WORKING_DIRECTORY }} apply -auto-approve -lock=false -var="identifier=${{github.event.inputs.rdsidentifier}}" -var="instance_class=${{github.event.inputs.instance_class }}" -var="db_name=${{github.event.inputs.rdsdbname}}" -var="account_id_dev=${{env.account_id_dev}}" -var="leadership-spoc=${{github.event.inputs.tag1}}" -var="cost-center=${{github.event.inputs.tag2}}_dev" -var="service-family=${{github.event.inputs.tag2}}" -var="service-name=${{github.event.inputs.tag3}}" -var="service-owner=${{github.event.inputs.tag4}}" -var="db-instance=${{github.event.inputs.instance_class}}" -var="jira-request=${{github.event.inputs.tag5}}"
+# - id: "terraform_apply"
+#   name: Terraform apply
+#   # if: ${{ github.event.inputs.terraform_action == 'apply' }}
+#   run: |
+#     #cd zee5-DevOps-Infra/db-selfservice/mysql/
+#     rm -rf .terraform
+#     terraform -chdir=${{ env.TF_WORKING_DIRECTORY }} init --backend-config="access_key=${{secrets.AWS_ACCESS_KEY_ID}}" --backend-config="secret_key=${{secrets.AWS_SECRET_ACCESS_KEY}}"
+#     terraform -chdir=${{ env.TF_WORKING_DIRECTORY }} validate -no-color
+#     terraform -chdir=${{ env.TF_WORKING_DIRECTORY }} plan -no-color -lock=false -var="identifier=${{github.event.inputs.rdsidentifier}}" -var="instance_class=${{github.event.inputs.instance_class }}" -var="db_name=${{github.event.inputs.rdsdbname}}" -var="account_id_dev=${{env.account_id_dev}}" -var="leadership-spoc=${{github.event.inputs.tag1}}" -var="cost-center=${{github.event.inputs.tag2}}_dev" -var="service-family=${{github.event.inputs.tag2}}" -var="service-name=${{github.event.inputs.tag3}}" -var="service-owner=${{github.event.inputs.tag4}}" -var="db-instance=${{github.event.inputs.instance_class}}" -var="jira-request=${{github.event.inputs.tag5}}"
+#     # terraform -chdir=${{ env.TF_WORKING_DIRECTORY }} apply -auto-approve -lock=false -var="identifier=${{github.event.inputs.rdsidentifier}}" -var="instance_class=${{github.event.inputs.instance_class }}" -var="db_name=${{github.event.inputs.rdsdbname}}" -var="account_id_dev=${{env.account_id_dev}}" -var="leadership-spoc=${{github.event.inputs.tag1}}" -var="cost-center=${{github.event.inputs.tag2}}_dev" -var="service-family=${{github.event.inputs.tag2}}" -var="service-name=${{github.event.inputs.tag3}}" -var="service-owner=${{github.event.inputs.tag4}}" -var="db-instance=${{github.event.inputs.instance_class}}" -var="jira-request=${{github.event.inputs.tag5}}"
+# - id: "terraform_apply"
+#   name: Terraform apply
+#   # if: ${{ github.event.inputs.terraform_action == 'apply' }}
+#   run: |
+#     #cd zee5-DevOps-Infra/db-selfservice/mysql/
+#     rm -rf .terraform
+#     terraform -chdir=${{ env.TF_WORKING_DIRECTORY }} init --backend-config="access_key=${{secrets.AWS_ACCESS_KEY_ID}}" --backend-config="secret_key=${{secrets.AWS_SECRET_ACCESS_KEY}}"
+#     terraform -chdir=${{ env.TF_WORKING_DIRECTORY }} validate -no-color
+#     terraform -chdir=${{ env.TF_WORKING_DIRECTORY }} plan -no-color -lock=false -var="identifier=${{github.event.inputs.rdsidentifier}}" -var="instance_class=${{github.event.inputs.instance_class }}" -var="db_name=${{github.event.inputs.rdsdbname}}" -var="account_id_dev=${{env.account_id_dev}}" -var="leadership-spoc=${{github.event.inputs.tag1}}" -var="cost-center=${{github.event.inputs.tag2}}_dev" -var="service-family=${{github.event.inputs.tag2}}" -var="service-name=${{github.event.inputs.tag3}}" -var="service-owner=${{github.event.inputs.tag4}}" -var="db-instance=${{github.event.inputs.instance_class}}" -var="jira-request=${{github.event.inputs.tag5}}"
+#     # terraform -chdir=${{ env.TF_WORKING_DIRECTORY }} apply -auto-approve -lock=false -var="identifier=${{github.event.inputs.rdsidentifier}}" -var="instance_class=${{github.event.inputs.instance_class }}" -var="db_name=${{github.event.inputs.rdsdbname}}" -var="account_id_dev=${{env.account_id_dev}}" -var="leadership-spoc=${{github.event.inputs.tag1}}" -var="cost-center=${{github.event.inputs.tag2}}_dev" -var="service-family=${{github.event.inputs.tag2}}" -var="service-name=${{github.event.inputs.tag3}}" -var="service-owner=${{github.event.inputs.tag4}}" -var="db-instance=${{github.event.inputs.instance_class}}" -var="jira-request=${{github.event.inputs.tag5}}"
+# - id: "terraform_apply"
+#   name: Terraform apply
+#   # if: ${{ github.event.inputs.terraform_action == 'apply' }}
+#   run: |
+#     #cd zee5-DevOps-Infra/db-selfservice/mysql/
+#     rm -rf .terraform
+#     terraform -chdir=${{ env.TF_WORKING_DIRECTORY }} init --backend-config="access_key=${{secrets.AWS_ACCESS_KEY_ID}}" --backend-config="secret_key=${{secrets.AWS_SECRET_ACCESS_KEY}}"
+#     terraform -chdir=${{ env.TF_WORKING_DIRECTORY }} validate -no-color
+#     terraform -chdir=${{ env.TF_WORKING_DIRECTORY }} plan -no-color -lock=false -var="identifier=${{github.event.inputs.rdsidentifier}}" -var="instance_class=${{github.event.inputs.instance_class }}" -var="db_name=${{github.event.inputs.rdsdbname}}" -var="account_id_dev=${{env.account_id_dev}}" -var="leadership-spoc=${{github.event.inputs.tag1}}" -var="cost-center=${{github.event.inputs.tag2}}_dev" -var="service-family=${{github.event.inputs.tag2}}" -var="service-name=${{github.event.inputs.tag3}}" -var="service-owner=${{github.event.inputs.tag4}}" -var="db-instance=${{github.event.inputs.instance_class}}" -var="jira-request=${{github.event.inputs.tag5}}"
+#     # terraform -chdir=${{ env.TF_WORKING_DIRECTORY }} apply -auto-approve -lock=false -var="identifier=${{github.event.inputs.rdsidentifier}}" -var="instance_class=${{github.event.inputs.instance_class }}" -var="db_name=${{github.event.inputs.rdsdbname}}" -var="account_id_dev=${{env.account_id_dev}}" -var="leadership-spoc=${{github.event.inputs.tag1}}" -var="cost-center=${{github.event.inputs.tag2}}_dev" -var="service-family=${{github.event.inputs.tag2}}" -var="service-name=${{github.event.inputs.tag3}}" -var="service-owner=${{github.event.inputs.tag4}}" -var="db-instance=${{github.event.inputs.instance_class}}" -var="jira-request=${{github.event.inputs.tag5}}"
+# - id: "terraform_apply"
+#   name: Terraform apply
+#   # if: ${{ github.event.inputs.terraform_action == 'apply' }}
+#   run: |
+#     #cd zee5-DevOps-Infra/db-selfservice/mysql/
+#     rm -rf .terraform
+#     terraform -chdir=${{ env.TF_WORKING_DIRECTORY }} init --backend-config="access_key=${{secrets.AWS_ACCESS_KEY_ID}}" --backend-config="secret_key=${{secrets.AWS_SECRET_ACCESS_KEY}}"
+#     terraform -chdir=${{ env.TF_WORKING_DIRECTORY }} validate -no-color
+#     terraform -chdir=${{ env.TF_WORKING_DIRECTORY }} plan -no-color -lock=false -var="identifier=${{github.event.inputs.rdsidentifier}}" -var="instance_class=${{github.event.inputs.instance_class }}" -var="db_name=${{github.event.inputs.rdsdbname}}" -var="account_id_dev=${{env.account_id_dev}}" -var="leadership-spoc=${{github.event.inputs.tag1}}" -var="cost-center=${{github.event.inputs.tag2}}_dev" -var="service-family=${{github.event.inputs.tag2}}" -var="service-name=${{github.event.inputs.tag3}}" -var="service-owner=${{github.event.inputs.tag4}}" -var="db-instance=${{github.event.inputs.instance_class}}" -var="jira-request=${{github.event.inputs.tag5}}"
+#     # terraform -chdir=${{ env.TF_WORKING_DIRECTORY }} apply -auto-approve -lock=false -var="identifier=${{github.event.inputs.rdsidentifier}}" -var="instance_class=${{github.event.inputs.instance_class }}" -var="db_name=${{github.event.inputs.rdsdbname}}" -var="account_id_dev=${{env.account_id_dev}}" -var="leadership-spoc=${{github.event.inputs.tag1}}" -var="cost-center=${{github.event.inputs.tag2}}_dev" -var="service-family=${{github.event.inputs.tag2}}" -var="service-name=${{github.event.inputs.tag3}}" -var="service-owner=${{github.event.inputs.tag4}}" -var="db-instance=${{github.event.inputs.instance_class}}" -var="jira-request=${{github.event.inputs.tag5}}"
